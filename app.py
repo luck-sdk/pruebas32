@@ -1,9 +1,13 @@
-from fastapi import FastAPI
+from flask import Flask, request, jsonify
 import pyodbc
-from datetime import datetime
+import os
+import time
 
-app = FastAPI()
+app = Flask(__name__)
 
+# ======================
+# CONEXIÓN AZURE SQL
+# ======================
 CONN_STR = (
     "DRIVER={ODBC Driver 17 for SQL Server};"
     "SERVER=tcp:jhe.database.windows.net,1433;"
@@ -17,18 +21,29 @@ CONN_STR = (
 def get_conn():
     return pyodbc.connect(CONN_STR)
 
-@app.get("/")
+# ======================
+# HOME
+# ======================
+@app.route("/")
 def home():
-    return {"status": "OK", "time": str(datetime.now())}
+    return {"status": "OK", "msg": "API funcionando"}
 
-@app.post("/mediciones")
-def insertar(data: dict):
+# ======================
+# INSERTAR DATOS (ESP32)
+# ======================
+@app.route("/mediciones", methods=["POST"])
+def insertar():
+    data = request.get_json()
+
+    if "alcohol" not in data:
+        return {"error": "Falta alcohol"}, 400
+
     alcohol = float(data["alcohol"])
 
     conn = get_conn()
-    cur = conn.cursor()
+    cursor = conn.cursor()
 
-    cur.execute(
+    cursor.execute(
         "INSERT INTO mediciones (alcohol) VALUES (?)",
         alcohol
     )
@@ -38,13 +53,16 @@ def insertar(data: dict):
 
     return {"status": "ok", "alcohol": alcohol}
 
-@app.get("/mediciones")
+# ======================
+# OBTENER DATOS
+# ======================
+@app.route("/mediciones", methods=["GET"])
 def listar():
     conn = get_conn()
-    cur = conn.cursor()
+    cursor = conn.cursor()
 
-    cur.execute("SELECT TOP 50 id, fecha, alcohol FROM mediciones ORDER BY id DESC")
-    rows = cur.fetchall()
+    cursor.execute("SELECT TOP 50 id, fecha, alcohol FROM mediciones ORDER BY id DESC")
+    rows = cursor.fetchall()
 
     conn.close()
 
@@ -52,3 +70,28 @@ def listar():
         {"id": r[0], "fecha": str(r[1]), "alcohol": r[2]}
         for r in rows
     ]
+
+# ======================
+# ÚLTIMO DATO
+# ======================
+@app.route("/mediciones/ultima", methods=["GET"])
+def ultima():
+    conn = get_conn()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT TOP 1 id, fecha, alcohol FROM mediciones ORDER BY id DESC")
+    r = cursor.fetchone()
+
+    conn.close()
+
+    if not r:
+        return {"msg": "sin datos"}
+
+    return {"id": r[0], "fecha": str(r[1]), "alcohol": r[2]}
+
+# ======================
+# RUN
+# ======================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
