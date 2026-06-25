@@ -1,5 +1,4 @@
 #!/bin/bash
+# Comando de inicio para Azure
+gunicorn --bind=0.0.0.0 --timeout=300 --workers=1 wsgi:app
 
-echo "Iniciando FastAPI..."
-
-uvicorn app:app --host=0.0.0.0 --port=8000 --workers 2
