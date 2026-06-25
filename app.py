@@ -1,13 +1,9 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 import pyodbc
-import os
 from datetime import datetime
 
 app = FastAPI()
 
-# =========================
-# CONEXIÓN SQL (AZURE)
-# =========================
 CONN_STR = (
     "DRIVER={ODBC Driver 17 for SQL Server};"
     "SERVER=tcp:jhe.database.windows.net,1433;"
@@ -21,29 +17,18 @@ CONN_STR = (
 def get_conn():
     return pyodbc.connect(CONN_STR)
 
-# =========================
-# HOME
-# =========================
 @app.get("/")
 def home():
-    return {
-        "status": "OK",
-        "message": "FAST API RUNNING 🚀",
-        "time": str(datetime.now())
-    }
+    return {"status": "OK", "time": str(datetime.now())}
 
-# =========================
-# INSERT (ESP32)
-# =========================
 @app.post("/mediciones")
-async def insertar(request: Request):
-    data = await request.json()
+def insertar(data: dict):
     alcohol = float(data["alcohol"])
 
     conn = get_conn()
-    cursor = conn.cursor()
+    cur = conn.cursor()
 
-    cursor.execute(
+    cur.execute(
         "INSERT INTO mediciones (alcohol) VALUES (?)",
         alcohol
     )
@@ -53,16 +38,13 @@ async def insertar(request: Request):
 
     return {"status": "ok", "alcohol": alcohol}
 
-# =========================
-# LISTAR
-# =========================
 @app.get("/mediciones")
 def listar():
     conn = get_conn()
-    cursor = conn.cursor()
+    cur = conn.cursor()
 
-    cursor.execute("SELECT TOP 50 id, fecha, alcohol FROM mediciones ORDER BY id DESC")
-    rows = cursor.fetchall()
+    cur.execute("SELECT TOP 50 id, fecha, alcohol FROM mediciones ORDER BY id DESC")
+    rows = cur.fetchall()
 
     conn.close()
 
@@ -70,21 +52,3 @@ def listar():
         {"id": r[0], "fecha": str(r[1]), "alcohol": r[2]}
         for r in rows
     ]
-
-# =========================
-# ULTIMO DATO (MUY RÁPIDO)
-# =========================
-@app.get("/mediciones/ultima")
-def ultima():
-    conn = get_conn()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT TOP 1 id, fecha, alcohol FROM mediciones ORDER BY id DESC")
-    r = cursor.fetchone()
-
-    conn.close()
-
-    if not r:
-        return {"msg": "sin datos"}
-
-    return {"id": r[0], "fecha": str(r[1]), "alcohol": r[2]}
